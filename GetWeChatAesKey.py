@@ -1,34 +1,79 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import pymem
+import segno
 import struct
 import binascii
+from pymem import Pymem
+from win32api import GetFileVersionInfo, HIWORD, LOWORD
 
 
-AESKEY_OFFSET = 0x1DDF914
-WECHAT_VERSION = "3.3.0.115"
+def error():
+    print("请按提示排查，如仍有问题可扫描二维码联系作者")
+    qrcode = segno.make("http://weixin.qq.com/r/OzopMZrEuMfHrd5S928p")
+    qrcode.show()
+    exit(-1)
 
 
-def getAesKey(p):
-    # 获取 WeChatWin.dll 的基地址
-    base_address = pymem.process.module_from_name(p.process_handle, "wechatwin.dll").lpBaseOfDll
+def getVersionBase(pm):
+    WeChatWindll_base = 0
+    WeChatWindll_path = ""
+    for m in list(pm.list_modules()):
+        path = m.filename
+        if path.endswith("WeChatWin.dll"):
+            WeChatWindll_base = m.lpBaseOfDll
+            WeChatWindll_path = path
+            break
 
-    # 读取 AES Key 的地址
-    result = p.read_bytes(base_address + AESKEY_OFFSET, 4)
-    addr = struct.unpack("<I", result)[0]
+    if not WeChatWindll_path:
+        print("获取版本失败，请确认本系统是否成功安装了微信！")
+        error()
 
-    # 读取 AES Key
-    aesKey = p.read_bytes(addr, 0x20)
+    version = GetFileVersionInfo(WeChatWindll_path, "\\")
 
-    # 解码
-    result = binascii.b2a_hex(aesKey)
-    return base_address, result.decode()
+    msv = version['FileVersionMS']
+    lsv = version['FileVersionLS']
+    version = f"{str(HIWORD(msv))}.{str(LOWORD(msv))}.{str(HIWORD(lsv))}.{str(LOWORD(lsv))}"
 
+    return version, WeChatWindll_base
+
+
+def getAesKey(pm, base, offset):
+    try:
+        result = pm.read_bytes(base + offset, 4)    # 读取 AES Key 的地址
+        addr = struct.unpack("<I", result)[0]       # 地址为小端 4 字节整型
+        aesKey = pm.read_bytes(addr, 0x20)          # 读取 AES Key
+        result = binascii.b2a_hex(aesKey)           # 解码
+    except Exception as e:
+        print(f"{e}")
+        print(f"请确认微信已经登录！")
+        error()
+
+    return result.decode()
+
+
+AESKEY_OFFSETS = {
+    "3.3.0.115": 0x1DDF914,
+    "3.3.5.34": 0x1D2FB34,
+    "3.6.0.18": 0x222EFE4,
+}
 
 if __name__ == "__main__":
-    print(f"微信版本为：{WECHAT_VERSION}\n密钥偏移地址为：{hex(AESKEY_OFFSET)}")
-    p = pymem.Pymem()
-    p.open_process_from_name("WeChat.exe")
-    base_offset, aesKey = getAesKey(p)
-    print(f"数据库密钥为：{aesKey}")
+    try:
+        pm = Pymem("WeChat.exe")
+    except Exception as e:
+        print(f"{e}，请确认微信程序已经打开并登录！")
+        error()
+
+    version, base = getVersionBase(pm)
+    print(f"微信版本：{version}\n微信基址：{hex(base)}")
+
+    offset = AESKEY_OFFSETS.get(version, None)
+    if not offset:
+        print(f"暂不支持版本 {version}，请联系作者。")
+        error()
+
+    print(f"偏移地址：{hex(offset)}")
+
+    aesKey = getAesKey(pm, base, offset)
+    print(f"数据库密钥：{aesKey}")
