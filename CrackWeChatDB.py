@@ -4,6 +4,7 @@
 import hmac
 import ctypes
 import hashlib
+import argparse
 from Crypto.Cipher import AES
 
 
@@ -30,11 +31,10 @@ def decrypt_msg(path, password):
     hash_mac.update(bytes(ctypes.c_int(1)))
 
     if hash_mac.digest() != page1[-32:-12]:
-        raise RuntimeError("Wrong Password")
+        raise RuntimeError("密码错误！")
 
     pages = [blist[i:i+DEFAULT_PAGESIZE] for i in range(DEFAULT_PAGESIZE, len(blist), DEFAULT_PAGESIZE)]
     pages.insert(0, page1)  # 把第一页补上
-
     with open(f"{path}.dec.db", "wb") as f:
         f.write(SQLITE_FILE_HEADER)  # 写入文件头
 
@@ -45,7 +45,12 @@ def decrypt_msg(path, password):
 
 
 if __name__ == "__main__":
-    path = "MSG0.db"
-    key = bytes.fromhex("刚才获取到的密钥")
+    parse = argparse.ArgumentParser()
+    parse.add_argument("-p", "--path", type=str, required=True, help="待解密数据库路径")
+    parse.add_argument("-k", "--key", type=str, required=True, help="通过 GetWeChatAesKey.py 获取到的密码")
+
+    args = parse.parse_args()
+    key = bytes.fromhex(args.key)
+    path = args.path
 
     decrypt_msg(path, key)
