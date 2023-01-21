@@ -1,3 +1,4 @@
 segno
+pycryptodome
 pymem
 pywin32
