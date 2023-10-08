@@ -95,6 +95,9 @@ AESKEY_OFFSETS = {
     "3.8.1.26": 0x2C429FC,
     "3.9.0.28": 0x2E2D1AC,
     "3.9.2.23": 0x2FFD90C,
+}
+
+AESKEY_OFFSETS_64 = {
     "3.9.5.91": 0x3ACCC70
 }
 
@@ -109,7 +112,11 @@ if __name__ == "__main__":
     print(f"微信版本：{version} " + "(64bit)" if is_64_bit(pm) else  "(32bit)")
     print(f"微信基址：{hex(base)}")
 
-    offset = AESKEY_OFFSETS.get(version, None)
+    if is_64_bit(pm):
+        offset = AESKEY_OFFSETS_64.get(version, None)
+    else:
+        offset = AESKEY_OFFSETS.get(version, None)
+        
     if not offset:
         print(f"暂不支持版本 {version}，请联系作者。")
         error()
