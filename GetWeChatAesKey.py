@@ -5,7 +5,7 @@ import segno
 import struct
 import os
 import binascii
-from pymem import Pymem, process
+from pymem import Pymem
 from win32api import GetFileVersionInfo, HIWORD, LOWORD
 
 
