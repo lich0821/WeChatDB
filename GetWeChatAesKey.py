@@ -3,8 +3,9 @@
 
 import segno
 import struct
+import os
 import binascii
-from pymem import Pymem
+from pymem import Pymem, process
 from win32api import GetFileVersionInfo, HIWORD, LOWORD
 
 
@@ -14,6 +15,35 @@ def error():
     qrcode.show()
     exit(-1)
 
+# Adapted from: http://stackoverflow.com/a/495305/1338797
+def arch_of(dll_file):
+    with open(dll_file, 'rb') as f:
+        doshdr = f.read(64)
+        magic, padding, offset = struct.unpack('2s58si', doshdr)
+        # print magic, offset
+        if magic != b'MZ':
+            return None
+        f.seek(offset, os.SEEK_SET)
+        pehdr = f.read(6)
+        # careful! H == unsigned short, x64 is negative with signed
+        magic, padding, machine = struct.unpack('2s2sH', pehdr)
+        # print magic, hex(machine)
+        if magic != b'PE':
+            return None
+        if machine == 0x014c:
+            return 'i386'
+        if machine == 0x0200:
+            return 'IA64'
+        if machine == 0x8664:
+            return 'x64'
+        return 'unknown'
+
+def is_64_bit(pm):
+    exe_arch = arch_of(list(pm.list_modules())[0].filename)
+    if exe_arch == "x64":
+        return True
+    else:
+        return False
 
 def getVersionBase(pm):
     WeChatWindll_base = 0
@@ -37,11 +67,15 @@ def getVersionBase(pm):
 
     return version, WeChatWindll_base
 
-
 def getAesKey(pm, base, offset):
     try:
-        result = pm.read_bytes(base + offset, 4)    # 读取 AES Key 的地址
-        addr = struct.unpack("<I", result)[0]       # 地址为小端 4 字节整型
+        if is_64_bit(pm):
+            result = pm.read_bytes(base + offset, 8)    # 读取 AES Key 的地址
+            addr = struct.unpack("<Q", result)[0]       # 地址为小端 8 字节整型
+        else:    
+            result = pm.read_bytes(base + offset, 4)    # 读取 AES Key 的地址
+            addr = struct.unpack("<I", result)[0]       # 地址为小端 4 字节整型
+
         aesKey = pm.read_bytes(addr, 0x20)          # 读取 AES Key
         result = binascii.b2a_hex(aesKey)           # 解码
     except Exception as e:
@@ -50,7 +84,6 @@ def getAesKey(pm, base, offset):
         error()
 
     return result.decode()
-
 
 AESKEY_OFFSETS = {
     "3.3.0.115": 0x1DDF914,
@@ -62,6 +95,7 @@ AESKEY_OFFSETS = {
     "3.8.1.26": 0x2C429FC,
     "3.9.0.28": 0x2E2D1AC,
     "3.9.2.23": 0x2FFD90C,
+    "3.9.5.91": 0x3ACCC70
 }
 
 if __name__ == "__main__":
@@ -72,7 +106,8 @@ if __name__ == "__main__":
         error()
 
     version, base = getVersionBase(pm)
-    print(f"微信版本：{version}\n微信基址：{hex(base)}")
+    print(f"微信版本：{version} " + "(64bit)" if is_64_bit(pm) else  "(32bit)")
+    print(f"微信基址：{hex(base)}")
 
     offset = AESKEY_OFFSETS.get(version, None)
     if not offset:
