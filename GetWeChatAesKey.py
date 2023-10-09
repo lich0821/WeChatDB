@@ -8,7 +8,6 @@ import binascii
 from pymem import Pymem
 from win32api import GetFileVersionInfo, HIWORD, LOWORD
 
-
 def error():
     print("请按提示排查，如仍有问题可扫描二维码联系作者")
     qrcode = segno.make("http://weixin.qq.com/r/OzopMZrEuMfHrd5S928p")
@@ -72,7 +71,7 @@ def getAesKey(pm, base, offset):
         if is_64_bit(pm):
             result = pm.read_bytes(base + offset, 8)    # 读取 AES Key 的地址
             addr = struct.unpack("<Q", result)[0]       # 地址为小端 8 字节整型
-        else:    
+        else:
             result = pm.read_bytes(base + offset, 4)    # 读取 AES Key 的地址
             addr = struct.unpack("<I", result)[0]       # 地址为小端 4 字节整型
 
@@ -109,14 +108,14 @@ if __name__ == "__main__":
         error()
 
     version, base = getVersionBase(pm)
-    print(f"微信版本：{version} " + "(64bit)" if is_64_bit(pm) else  "(32bit)")
+    print(f"微信版本：{version} " + ("(64bit)" if is_64_bit(pm) else "(32bit)"))
     print(f"微信基址：{hex(base)}")
 
     if is_64_bit(pm):
         offset = AESKEY_OFFSETS_64.get(version, None)
     else:
         offset = AESKEY_OFFSETS.get(version, None)
-        
+
     if not offset:
         print(f"暂不支持版本 {version}，请联系作者。")
         error()
