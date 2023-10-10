@@ -1,12 +1,14 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-import segno
-import struct
-import os
 import binascii
+import os
+import struct
+
+import segno
 from pymem import Pymem
-from win32api import GetFileVersionInfo, HIWORD, LOWORD
+from win32api import HIWORD, LOWORD, GetFileVersionInfo
+
 
 def error():
     print("请按提示排查，如仍有问题可扫描二维码联系作者")
@@ -15,6 +17,8 @@ def error():
     exit(-1)
 
 # Adapted from: http://stackoverflow.com/a/495305/1338797
+
+
 def arch_of(dll_file):
     with open(dll_file, 'rb') as f:
         doshdr = f.read(64)
@@ -37,12 +41,14 @@ def arch_of(dll_file):
             return 'x64'
         return 'unknown'
 
+
 def is_64_bit(pm):
     exe_arch = arch_of(list(pm.list_modules())[0].filename)
     if exe_arch == "x64":
         return True
     else:
         return False
+
 
 def getVersionBase(pm):
     WeChatWindll_base = 0
@@ -66,6 +72,7 @@ def getVersionBase(pm):
 
     return version, WeChatWindll_base
 
+
 def getAesKey(pm, base, offset):
     try:
         if is_64_bit(pm):
@@ -83,6 +90,7 @@ def getAesKey(pm, base, offset):
         error()
 
     return result.decode()
+
 
 AESKEY_OFFSETS = {
     "3.3.0.115": 0x1DDF914,
