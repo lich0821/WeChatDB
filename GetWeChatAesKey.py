@@ -6,9 +6,9 @@ import os
 import struct
 
 import segno
-from pymem import Pymem
+from pymem import Pymem, process, pattern
 from win32api import HIWORD, LOWORD, GetFileVersionInfo
-
+import argparse
 
 def error():
     print("请按提示排查，如仍有问题可扫描二维码联系作者")
@@ -91,6 +91,22 @@ def getAesKey(pm, base, offset):
 
     return result.decode()
 
+# Tested
+# 3.9.5.91 (64bit)
+# 3.9.7.29 (64bit)
+# 3.9.8.15 (64bit)
+# 3.9.5.80 (32bit)
+def getWechatIdAdd(pm, id):
+    bytes_pattern = bytearray()
+    bytes_pattern.extend(map(ord, id))
+    id_pattern = bytes(bytes_pattern)
+    wechatwindll_module = process.module_from_name(pm.process_handle, "WeChatWin.dll")
+    wechat_id_addrs = pattern.pattern_scan_module(pm.process_handle, wechatwindll_module, id_pattern, return_multiple=True)
+    if wechat_id_addrs == None or len(wechat_id_addrs) != 2:
+      print(f"未能寻获微信账号: {id}")
+      error()
+    
+    return wechat_id_addrs[1] - (64 if is_64_bit(pm) else 36)
 
 AESKEY_OFFSETS = {
     "3.3.0.115": 0x1DDF914,
@@ -115,16 +131,25 @@ if __name__ == "__main__":
         print(f"{e}，请确认微信程序已经打开并登录！")
         error()
 
+    ap = argparse.ArgumentParser()
+    ap.add_argument("-i", "--id", required=False, help="用微信账号")
+    args = vars(ap.parse_args())
+
     version, base = getVersionBase(pm)
     print(f"微信版本：{version} " + ("(64bit)" if is_64_bit(pm) else "(32bit)"))
     print(f"微信基址：{hex(base)}")
 
-    if is_64_bit(pm):
-        offset = AESKEY_OFFSETS_64.get(version, None)
+    wechatid = args["id"]
+    if wechatid != None:
+      print(f"使用微信账号《{wechatid}》搜索")
+      offset = getWechatIdAdd(pm, wechatid) - base
     else:
+      if is_64_bit(pm):
+        offset = AESKEY_OFFSETS_64.get(version, None)
+      else:
         offset = AESKEY_OFFSETS.get(version, None)
 
-    if not offset:
+      if not offset:
         print(f"暂不支持版本 {version}，请联系作者。")
         error()
 
