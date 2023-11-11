@@ -1,14 +1,15 @@
 #! /usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import argparse
 import binascii
 import os
 import struct
 
 import segno
-from pymem import Pymem, process, pattern
+from pymem import Pymem, pattern, process
 from win32api import HIWORD, LOWORD, GetFileVersionInfo
-import argparse
+
 
 def error():
     print("请按提示排查，如仍有问题可扫描二维码联系作者")
@@ -16,34 +17,37 @@ def error():
     qrcode.show()
     exit(-1)
 
-# Adapted from: http://stackoverflow.com/a/495305/1338797
 
-
-def arch_of(dll_file):
-    with open(dll_file, 'rb') as f:
+def getDllArch(dll_file):
+    """Get DLL arch type
+    Adapted from: http://stackoverflow.com/a/495305/1338797
+    """
+    with open(dll_file, "rb") as f:
         doshdr = f.read(64)
-        magic, padding, offset = struct.unpack('2s58si', doshdr)
-        # print magic, offset
-        if magic != b'MZ':
+        magic, padding, offset = struct.unpack("2s58si", doshdr)
+
+        if magic != b"MZ":
             return None
         f.seek(offset, os.SEEK_SET)
         pehdr = f.read(6)
+
         # careful! H == unsigned short, x64 is negative with signed
-        magic, padding, machine = struct.unpack('2s2sH', pehdr)
-        # print magic, hex(machine)
-        if magic != b'PE':
+        magic, padding, machine = struct.unpack("2s2sH", pehdr)
+
+        if magic != b"PE":
             return None
         if machine == 0x014c:
-            return 'i386'
+            return "i386"
         if machine == 0x0200:
-            return 'IA64'
+            return "IA64"
         if machine == 0x8664:
-            return 'x64'
-        return 'unknown'
+            return "x64"
+
+        return "unknown"
 
 
-def is_64_bit(pm):
-    exe_arch = arch_of(list(pm.list_modules())[0].filename)
+def is64Bit(pm):
+    exe_arch = getDllArch(list(pm.list_modules())[0].filename)
     if exe_arch == "x64":
         return True
     else:
@@ -73,9 +77,31 @@ def getVersionBase(pm):
     return version, WeChatWindll_base
 
 
+def getOffsetByWxNum(pm, id):
+    """Get Key offset by WeChat Number
+        Tested with
+            3.9.5.91 (64bit)
+            3.9.7.29 (64bit)
+            3.9.8.15 (64bit)
+            3.9.5.80 (32bit)
+            3.9.2.23 (32bit)
+    """
+    bytes_pattern = bytearray()
+    bytes_pattern.extend(map(ord, id))
+    id_pattern = bytes(bytes_pattern)
+    wechatwindll_module = process.module_from_name(pm.process_handle, "WeChatWin.dll")
+    wechat_id_addrs = pattern.pattern_scan_module(
+        pm.process_handle, wechatwindll_module, id_pattern, return_multiple=True)
+    if wechat_id_addrs == None or len(wechat_id_addrs) != 2:
+        print(f"未能寻获微信账号: {id}")
+        error()
+
+    return wechat_id_addrs[1] - (64 if is64Bit(pm) else 36)
+
+
 def getAesKey(pm, base, offset):
     try:
-        if is_64_bit(pm):
+        if is64Bit(pm):
             result = pm.read_bytes(base + offset, 8)    # 读取 AES Key 的地址
             addr = struct.unpack("<Q", result)[0]       # 地址为小端 8 字节整型
         else:
@@ -91,22 +117,6 @@ def getAesKey(pm, base, offset):
 
     return result.decode()
 
-# Tested
-# 3.9.5.91 (64bit)
-# 3.9.7.29 (64bit)
-# 3.9.8.15 (64bit)
-# 3.9.5.80 (32bit)
-def getWechatIdAdd(pm, id):
-    bytes_pattern = bytearray()
-    bytes_pattern.extend(map(ord, id))
-    id_pattern = bytes(bytes_pattern)
-    wechatwindll_module = process.module_from_name(pm.process_handle, "WeChatWin.dll")
-    wechat_id_addrs = pattern.pattern_scan_module(pm.process_handle, wechatwindll_module, id_pattern, return_multiple=True)
-    if wechat_id_addrs == None or len(wechat_id_addrs) != 2:
-      print(f"未能寻获微信账号: {id}")
-      error()
-    
-    return wechat_id_addrs[1] - (64 if is_64_bit(pm) else 36)
 
 AESKEY_OFFSETS = {
     "3.3.0.115": 0x1DDF914,
@@ -132,26 +142,26 @@ if __name__ == "__main__":
         error()
 
     ap = argparse.ArgumentParser()
-    ap.add_argument("-i", "--id", required=False, help="用微信账号")
+    ap.add_argument("-i", "--id", required=False, help="微信号，通过微信号来获取密钥偏移")
     args = vars(ap.parse_args())
 
     version, base = getVersionBase(pm)
-    print(f"微信版本：{version} " + ("(64bit)" if is_64_bit(pm) else "(32bit)"))
+    print(f"微信版本：{version} " + ("(64bit)" if is64Bit(pm) else "(32bit)"))
     print(f"微信基址：{hex(base)}")
 
     wechatid = args["id"]
     if wechatid != None:
-      print(f"使用微信账号《{wechatid}》搜索")
-      offset = getWechatIdAdd(pm, wechatid) - base
+        print(f"使用微信账号 {wechatid} 搜索")
+        offset = getOffsetByWxNum(pm, wechatid) - base
     else:
-      if is_64_bit(pm):
-        offset = AESKEY_OFFSETS_64.get(version, None)
-      else:
-        offset = AESKEY_OFFSETS.get(version, None)
+        if is64Bit(pm):
+            offset = AESKEY_OFFSETS_64.get(version, None)
+        else:
+            offset = AESKEY_OFFSETS.get(version, None)
 
-      if not offset:
-        print(f"暂不支持版本 {version}，请联系作者。")
-        error()
+        if not offset:
+            print(f"暂不支持版本 {version}，请联系作者。")
+            error()
 
     print(f"偏移地址：{hex(offset)}")
 
