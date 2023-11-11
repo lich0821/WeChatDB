@@ -95,7 +95,8 @@ def getAesKey(pm, base, offset):
 # 3.9.5.91 (64bit)
 # 3.9.7.29 (64bit)
 # 3.9.8.15 (64bit)
-def getWechatIdAdd(pm, base, id):
+# 3.9.5.80 (32bit)
+def getWechatIdAdd(pm, id):
     bytes_pattern = bytearray()
     bytes_pattern.extend(map(ord, id))
     id_pattern = bytes(bytes_pattern)
@@ -104,8 +105,8 @@ def getWechatIdAdd(pm, base, id):
     if wechat_id_addrs == None or len(wechat_id_addrs) != 2:
       print(f"未能寻获微信账号: {id}")
       error()
-
-    return (wechat_id_addrs[1]-64) - base
+    
+    return wechat_id_addrs[1] - (64 if is_64_bit(pm) else 36)
 
 AESKEY_OFFSETS = {
     "3.3.0.115": 0x1DDF914,
@@ -141,7 +142,7 @@ if __name__ == "__main__":
     wechatid = args["id"]
     if wechatid != None:
       print(f"使用微信账号《{wechatid}》搜索")
-      offset = getWechatIdAdd(pm, base, wechatid)
+      offset = getWechatIdAdd(pm, wechatid) - base
     else:
       if is_64_bit(pm):
         offset = AESKEY_OFFSETS_64.get(version, None)
