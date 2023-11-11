@@ -10,6 +10,17 @@ pip install -r requirements.txt
 ```
 
 ### 获取密钥
+两种方法，一种需要输入微信号；一种需要指定微信版本。
+
+#### 1 通过微信号
+感谢 @sanpee 的 [PR](https://github.com/lich0821/WeChatDB/pull/6)，可以无视版本。
+
+```sh
+python GetWeChatAesKey.py --id 当前登录的微信号
+```
+
+#### 2 直接运行
+如果当前微信版本在 `AESKEY_OFFSETS` 或者 `AESKEY_OFFSETS_64` 中（见 [GetWeChatAesKey.py](GetWeChatAesKey.py)），直接运行即可。
 ```sh
 python GetWeChatAesKey.py
 ```
