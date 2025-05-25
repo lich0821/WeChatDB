@@ -1,5 +1,0 @@
-segno
-pycryptodome
-pymem
-pywin32
-argparse
